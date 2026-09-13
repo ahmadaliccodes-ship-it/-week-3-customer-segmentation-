@@ -1,0 +1,44 @@
+{
+  "selected_k": 2,
+  "reason": "K=2 was selected because it has the highest K-Means silhouette among the stability-qualified candidates (silhouette=0.2903). Seed-variation mean ARI=1.0000; bootstrap mean ARI=0.9195. Selected the highest-silhouette K among candidates that pass both seed-variation and bootstrap stability checks. The hierarchical silhouette cross-check peaks at K=2 (silhouette=0.2585).",
+  "silhouette": 0.2903284869973543,
+  "stability": {
+    "seed_mean_ari": 1.0,
+    "bootstrap_mean_ari": 0.9195047157569696,
+    "threshold": 0.75,
+    "seed_pass": true,
+    "bootstrap_pass": true,
+    "pass": true
+  },
+  "hierarchical_best_k": 2,
+  "hierarchical_best_silhouette": 0.25849531748001764,
+  "stable_candidates": [
+    2,
+    3
+  ],
+  "decision_rule": "Highest K-Means silhouette among stability-qualified candidates; stability qualification requires seed-variation and bootstrap mean ARI >= 0.75. If none qualify, use highest silhouette with a stability warning.",
+  "candidate_stability": [
+    {
+      "k": 2,
+      "kmeans_silhouette": 0.2903284869973543,
+      "seed_mean_ari": 1.0,
+      "bootstrap_mean_ari": 0.9195047157569696,
+      "stable": true
+    },
+    {
+      "k": 3,
+      "kmeans_silhouette": 0.2582784274194209,
+      "seed_mean_ari": 0.9812941031493653,
+      "bootstrap_mean_ari": 0.7907157952716726,
+      "stable": true
+    },
+    {
+      "k": 4,
+      "kmeans_silhouette": 0.1884954525130424,
+      "seed_mean_ari": 0.9953461553081254,
+      "bootstrap_mean_ari": 0.6241786555242665,
+      "stable": false
+    }
+  ],
+  "feature_fingerprint": "f78035e648d15606bd2c1e1b7f22c6781adcafcff44924234f25d753293c8c8a"
+}

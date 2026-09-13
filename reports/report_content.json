@@ -1,0 +1,540 @@
+{
+  "title": "Wholesale Customer Segmentation: A Clustering Analysis",
+  "subtitle": "Unsupervised Learning Applied to the UCI Wholesale Customers Dataset",
+  "sections": {
+    "introduction": {
+      "heading": "1. Introduction & Dataset Overview",
+      "objective_text": "Segment wholesale distribution customers into meaningful groups based on their annual spending across six product categories (Fresh, Milk, Grocery, Frozen, Detergents_Paper, Delicassen), using unsupervised clustering (K-Means, cross-checked with Hierarchical Clustering), in order to reveal actionable customer archetypes for targeted business decisions (e.g. promotions, delivery/route planning, inventory allocation).",
+      "dataset_source": "https://archive.ics.uci.edu/dataset/292/wholesale+customers",
+      "data_dictionary": [
+        [
+          "Channel",
+          "Distribution channel: 1 = Horeca (Hotel/Restaurant/Cafe), 2 = Retail.",
+          "Post-hoc profiling"
+        ],
+        [
+          "Region",
+          "Geographic region code: 1 = Lisbon, 2 = Oporto, 3 = Other region.",
+          "Post-hoc profiling"
+        ],
+        [
+          "Fresh",
+          "Annual spending in monetary units on fresh products.",
+          "Clustering"
+        ],
+        [
+          "Milk",
+          "Annual spending in monetary units on milk products.",
+          "Clustering"
+        ],
+        [
+          "Grocery",
+          "Annual spending in monetary units on grocery products.",
+          "Clustering"
+        ],
+        [
+          "Frozen",
+          "Annual spending in monetary units on frozen products.",
+          "Clustering"
+        ],
+        [
+          "Detergents_Paper",
+          "Annual spending in monetary units on detergents and paper products.",
+          "Clustering"
+        ],
+        [
+          "Delicassen",
+          "Annual spending in monetary units on delicatessen products.",
+          "Clustering"
+        ]
+      ]
+    },
+    "data_overview": {
+      "heading": "2. Data Overview & Quality",
+      "shape": [
+        440,
+        8
+      ],
+      "missing_total": 0,
+      "duplicates": 0,
+      "channel_counts": {
+        "1": 298,
+        "2": 142
+      },
+      "region_counts": {
+        "3": 316,
+        "1": 77,
+        "2": 47
+      },
+      "negative_spend_total": 0,
+      "zero_spend_total": 0,
+      "constant_columns": []
+    },
+    "methodology": {
+      "heading": "3. Methodology",
+      "k_selection": {
+        "selected_k": 2,
+        "reason": "K=2 was selected because it has the highest K-Means silhouette among the stability-qualified candidates (silhouette=0.2903). Seed-variation mean ARI=1.0000; bootstrap mean ARI=0.9195. Selected the highest-silhouette K among candidates that pass both seed-variation and bootstrap stability checks. The hierarchical silhouette cross-check peaks at K=2 (silhouette=0.2585).",
+        "silhouette": 0.2903284869973543,
+        "stability": {
+          "seed_mean_ari": 1.0,
+          "bootstrap_mean_ari": 0.9195047157569696,
+          "threshold": 0.75,
+          "seed_pass": true,
+          "bootstrap_pass": true,
+          "pass": true
+        },
+        "decision_rule": "Highest K-Means silhouette among stability-qualified candidates; stability qualification requires seed-variation and bootstrap mean ARI >= 0.75. If none qualify, use highest silhouette with a stability warning.",
+        "threshold_note": "A project-defined ARI threshold of 0.75 was used as a practical stability heuristic."
+      },
+      "vif": {
+        "columns": [
+          "VIF"
+        ],
+        "index": [
+          "Fresh",
+          "Milk",
+          "Grocery",
+          "Frozen",
+          "Detergents_Paper",
+          "Delicassen"
+        ],
+        "data": [
+          [
+            1.18
+          ],
+          [
+            2.55
+          ],
+          [
+            8.79
+          ],
+          [
+            1.32
+          ],
+          [
+            8.1
+          ],
+          [
+            1.52
+          ]
+        ]
+      },
+      "skew_before": {
+        "Fresh": 2.56,
+        "Milk": 4.05,
+        "Grocery": 3.59,
+        "Frozen": 5.91,
+        "Detergents_Paper": 3.63,
+        "Delicassen": 11.15
+      },
+      "skew_after": {
+        "Fresh": -1.58,
+        "Milk": -0.22,
+        "Grocery": -0.67,
+        "Frozen": -0.35,
+        "Detergents_Paper": -0.24,
+        "Delicassen": -1.09
+      },
+      "code": {
+        "load": "def load_raw_data(snapshot=False) -> pd.DataFrame:\n    df_raw = pd.read_csv(DATA_PATH)\n    if snapshot:\n        df_raw.to_csv(PROJECT_ROOT / \"df_raw_snapshot.csv\", index=False)\n    return df_raw",
+        "feature_preparation": "def prepare_clustering_features(\n    df: pd.DataFrame,\n) -> tuple[np.ndarray, StandardScaler, list[str]]:\n    \"\"\"Build the canonical clustering matrix in one reproducible step.\n\n    The same feature preparation is used by the exploratory pipeline,\n    K-selection, downstream phases, and report generation:\n    raw spend -> log1p -> StandardScaler.\n    \"\"\"\n    features_df = get_feature_matrix(df)\n    log_df = apply_log_transform(features_df)\n    scaled_df, scaler = standardize_features(log_df)\n    feature_names = SPEND_COLS.copy()\n    return scaled_df.to_numpy(), scaler, feature_names",
+        "k_loop": "def fit_kmeans_range(X: np.ndarray) -> pd.DataFrame:\n    \"\"\"Fit K-Means for each K in K_RANGE, recording inertia (for the elbow\n    method) and average silhouette score (for silhouette analysis).\"\"\"\n    print(\"\\n\" + \"=\" * 70)\n    print(\"SECTION 2: K-MEANS — FIT ACROSS K = 2 TO 10\")\n    print(\"=\" * 70)\n\n    rows = []\n    for k in K_RANGE:\n        km = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=N_INIT)\n        labels = km.fit_predict(X)\n        sil = silhouette_score(X, labels)\n        rows.append({\"k\": k, \"inertia\": km.inertia_, \"silhouette\": sil})\n        print(f\"  K={k:2d}  inertia={km.inertia_:10.2f}  silhouette={sil:.4f}\")\n\n    kmeans_results = pd.DataFrame(rows)\n    print(\"\\n[OK] K-Means fitted for all K in range with fixed random_state=\"\n          f\"{RANDOM_STATE}, n_init={N_INIT} for reproducibility.\")\n    return kmeans_results",
+        "final": "def train_final_models(X: np.ndarray) -> dict:\n    \"\"\"Train the final K-Means model for each candidate K, with a fixed\n    random_state and n_init for full reproducibility.\"\"\"\n    print(\"\\n\" + \"=\" * 70)\n    print(\"SECTION 2: TRAIN FINAL K-MEANS MODEL(S)\")\n    print(\"=\" * 70)\n    print(f\"Fixed settings: random_state={RANDOM_STATE}, n_init={N_INIT!r}\")\n\n    models = {}\n    for k in CANDIDATE_KS:\n        km = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=N_INIT)\n        labels = km.fit_predict(X)\n        models[k] = {\"model\": km, \"labels\": labels}\n        sizes = pd.Series(labels).value_counts().sort_index()\n        print(f\"\\nK={k}: trained. Cluster sizes: {sizes.to_dict()} \"\n              f\"(inertia={km.inertia_:.2f})\")\n\n    print(\"\\n[OK] Final model(s) trained with locked random_state/n_init — \"\n          \"re-running this script reproduces identical cluster assignments.\")\n    return models\n\ndef summarize_ari(values: pd.Series | np.ndarray, threshold: float = STABILITY_THRESHOLD) -> dict:\n    \"\"\"Return the complete ARI distribution summary required for stability reporting.\"\"\"\n    series = pd.Series(values, dtype=float).dropna()\n    if series.empty:\n        raise ValueError(\"Cannot summarize an empty ARI series.\")\n\n    return {\n        \"mean_ari\": float(series.mean()),\n        \"median_ari\": float(series.median()),\n        \"std_ari\": float(series.std(ddof=1)),\n        \"min_ari\": float(series.min()),\n        \"max_ari\": float(series.max()),\n        \"p25_ari\": float(series.quantile(0.25)),\n        \"p75_ari\": float(series.quantile(0.75)),\n        \"pass_rate\": float((series >= threshold).mean()),\n        \"n_runs\": int(series.size),\n        \"threshold\": float(threshold),\n    }",
+        "stability": "def check_stability_seeds(X: np.ndarray, k: int) -> pd.DataFrame:\n    \"\"\"Re-run K-Means with several seeds and compute pairwise ARI.\"\"\"\n    print(f\"\\n--- Seed-variation stability check for K={k} ---\")\n\n    seed_labels = {}\n    for seed in STABILITY_SEEDS:\n        km = KMeans(n_clusters=k, random_state=seed, n_init=N_INIT)\n        seed_labels[seed] = km.fit_predict(X)\n\n    rows = []\n    seeds = list(seed_labels.keys())\n    for i in range(len(seeds)):\n        for j in range(i + 1, len(seeds)):\n            ari = adjusted_rand_score(seed_labels[seeds[i]], seed_labels[seeds[j]])\n            rows.append({\"seed_a\": seeds[i], \"seed_b\": seeds[j], \"ari\": ari})\n\n    ari_df = pd.DataFrame(rows)\n    summary = summarize_ari(ari_df[\"ari\"])\n    print(ari_df.round(4).to_string(index=False))\n    print(\n        \"Seed-variation ARI summary: \"\n        f\"mean={summary['mean_ari']:.4f}, median={summary['median_ari']:.4f}, \"\n        f\"std={summary['std_ari']:.4f}, min={summary['min_ari']:.4f}, \"\n        f\"max={summary['max_ari']:.4f}, p25={summary['p25_ari']:.4f}, \"\n        f\"p75={summary['p75_ari']:.4f}, pass rate={summary['pass_rate']:.1%}\"\n    )\n    return ari_df",
+        "pca": "def apply_pca(scaled_df: pd.DataFrame) -> tuple[np.ndarray, PCA]:\n    \"\"\"Reduce the 6 scaled spend features to 2 principal components for\n    2D visualization. Not used for clustering itself (Phase 6 clustered on\n    the full 6-feature space) — PCA here serves the visualization need\n    flagged in Phase 3's multicollinearity decision (Option A).\"\"\"\n    print(\"\\n\" + \"=\" * 70)\n    print(\"SECTION 2: APPLY PCA (2 COMPONENTS)\")\n    print(\"=\" * 70)\n\n    pca = PCA(n_components=2, random_state=RANDOM_STATE)\n    pcs = pca.fit_transform(scaled_df[SPEND_COLS])\n\n    explained_var = pca.explained_variance_ratio_\n    print(f\"PC1 explains {explained_var[0]*100:.1f}% of variance\")\n    print(f\"PC2 explains {explained_var[1]*100:.1f}% of variance\")\n    print(f\"Combined (PC1+PC2): {explained_var.sum()*100:.1f}% of total variance\")\n\n    loadings = pd.DataFrame(\n        pca.components_.T, columns=[\"PC1\", \"PC2\"], index=SPEND_COLS\n    )\n    print(\"\\nPCA component loadings (feature contribution to each PC):\")\n    print(loadings.round(3).to_string())\n\n    top_pc1 = loadings[\"PC1\"].abs().idxmax()\n    top_pc2 = loadings[\"PC2\"].abs().idxmax()\n    print(f\"\\n[FINDING] PC1 is most driven by '{top_pc1}' (consistent with Phase 7's \"\n          f\"ANOVA finding that Grocery/Detergents_Paper/Milk dominate cluster \"\n          \"separation). PC2 is most driven by \"\n          f\"'{top_pc2}'.\")\n\n    return pcs, pca"
+      }
+    },
+    "stability": {
+      "columns": [
+        "Mean ARI",
+        "Median ARI",
+        "Std ARI",
+        "Minimum ARI",
+        "Maximum ARI",
+        "25th Percentile",
+        "75th Percentile",
+        "% Runs Above Threshold",
+        "Threshold",
+        "Runs"
+      ],
+      "index": [
+        "(2, 'Seed-variation')",
+        "(2, 'Bootstrap')",
+        "(3, 'Seed-variation')",
+        "(3, 'Bootstrap')",
+        "(4, 'Seed-variation')",
+        "(4, 'Bootstrap')"
+      ],
+      "data": [
+        [
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.75,
+          10.0
+        ],
+        [
+          0.92,
+          0.95,
+          0.08,
+          0.71,
+          1.0,
+          0.88,
+          0.98,
+          0.96,
+          0.75,
+          50.0
+        ],
+        [
+          0.98,
+          0.98,
+          0.01,
+          0.96,
+          0.99,
+          0.98,
+          0.99,
+          1.0,
+          0.75,
+          10.0
+        ],
+        [
+          0.79,
+          0.85,
+          0.18,
+          0.32,
+          1.0,
+          0.77,
+          0.92,
+          0.78,
+          0.75,
+          50.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.99,
+          1.0,
+          0.99,
+          1.0,
+          1.0,
+          0.75,
+          10.0
+        ],
+        [
+          0.62,
+          0.65,
+          0.16,
+          0.32,
+          0.88,
+          0.49,
+          0.78,
+          0.28,
+          0.75,
+          50.0
+        ]
+      ]
+    },
+    "model_selection_table": [
+      [
+        2,
+        0.29,
+        0.92,
+        "Strong",
+        "Selected"
+      ],
+      [
+        3,
+        0.258,
+        0.79,
+        "Moderate",
+        "Rejected"
+      ],
+      [
+        4,
+        0.188,
+        0.62,
+        "Weak",
+        "Rejected"
+      ]
+    ],
+    "results": {
+      "heading": "4. Results",
+      "cluster_profiles": {
+        "sizes": {
+          "0": 252,
+          "1": 188
+        },
+        "pct": {
+          "0": 57.3,
+          "1": 42.7
+        },
+        "mean_profile": {
+          "columns": [
+            "Fresh",
+            "Milk",
+            "Grocery",
+            "Frozen",
+            "Detergents_Paper",
+            "Delicassen"
+          ],
+          "index": [
+            "0",
+            "1"
+          ],
+          "data": [
+            [
+              13973.1,
+              2401.8,
+              2918.7,
+              3705.7,
+              491.9,
+              1038.0
+            ],
+            [
+              9355.9,
+              10346.4,
+              14697.1,
+              2222.5,
+              6084.5,
+              2177.4
+            ]
+          ]
+        },
+        "median_profile": {
+          "columns": [
+            "Fresh",
+            "Milk",
+            "Grocery",
+            "Frozen",
+            "Detergents_Paper",
+            "Delicassen"
+          ],
+          "index": [
+            "0",
+            "1"
+          ],
+          "data": [
+            [
+              10347.5,
+              1871.0,
+              2406.0,
+              2225.0,
+              327.5,
+              749.5
+            ],
+            [
+              5406.5,
+              7690.5,
+              11527.0,
+              1061.5,
+              4495.0,
+              1388.5
+            ]
+          ]
+        },
+        "separation": {
+          "columns": [
+            "F_statistic",
+            "eta_squared"
+          ],
+          "index": [
+            "Grocery",
+            "Detergents_Paper",
+            "Milk",
+            "Delicassen",
+            "Fresh",
+            "Frozen"
+          ],
+          "data": [
+            [
+              264.788,
+              0.377
+            ],
+            [
+              223.088,
+              0.337
+            ],
+            [
+              173.906,
+              0.284
+            ],
+            [
+              18.267,
+              0.04
+            ],
+            [
+              14.802,
+              0.033
+            ],
+            [
+              10.263,
+              0.023
+            ]
+          ]
+        },
+        "channel_ct": {
+          "columns": [
+            "Horeca (1)",
+            "Retail (2)"
+          ],
+          "index": [
+            "0",
+            "1"
+          ],
+          "data": [
+            [
+              96.8,
+              3.2
+            ],
+            [
+              28.7,
+              71.3
+            ]
+          ]
+        },
+        "region_ct": {
+          "columns": [
+            1,
+            2,
+            3
+          ],
+          "index": [
+            "0",
+            "1"
+          ],
+          "data": [
+            [
+              19.0,
+              11.1,
+              69.8
+            ],
+            [
+              15.4,
+              10.1,
+              74.5
+            ]
+          ]
+        }
+      },
+      "pca": {
+        "explained_variance": [
+          0.44077751785700686,
+          0.2719491714858689
+        ],
+        "loadings": {
+          "columns": [
+            "PC1",
+            "PC2"
+          ],
+          "index": [
+            "Fresh",
+            "Milk",
+            "Grocery",
+            "Frozen",
+            "Detergents_Paper",
+            "Delicassen"
+          ],
+          "data": [
+            [
+              -0.105,
+              0.59
+            ],
+            [
+              0.542,
+              0.133
+            ],
+            [
+              0.571,
+              -0.006
+            ],
+            [
+              -0.138,
+              0.59
+            ],
+            [
+              0.551,
+              -0.071
+            ],
+            [
+              0.214,
+              0.53
+            ]
+          ]
+        }
+      }
+    },
+    "cluster_interpretation": {
+      "heading": "5. Cluster Interpretation",
+      "text": "Cluster 0 — Horeca (1) Fresh/Frozen Buyers\nSize: 252 customers (57.3%).\nHighest mean-spend categories: Fresh (13,973) and Frozen (3,706).\nMean total annual spend: 24,529.\nPost-hoc Channel profile: 96.8% Horeca (1).\n\nCluster 1 — Retail (2) Grocery/Milk Buyers\nSize: 188 customers (42.7%).\nHighest mean-spend categories: Grocery (14,697) and Milk (10,346).\nMean total annual spend: 44,884.\nPost-hoc Channel profile: 71.3% Retail (2).",
+      "cluster_names": {
+        "0": "Horeca (1) Fresh/Frozen Buyers",
+        "1": "Retail (2) Grocery/Milk Buyers"
+      }
+    },
+    "business_implications": {
+      "heading": "6. Business Implications",
+      "text": "1. EVIDENCE-BASED COMMERCIAL TARGETING:\n   - Marketing could prioritize Fresh-led cross-selling for Cluster 0 because Fresh has the highest mean annual spend in the segment (13,973), followed by Frozen (3,706). The segment is also 96.8% Horeca (1) based on Channel.\n   - Marketing could prioritize Grocery-led cross-selling for Cluster 1 because Grocery has the highest mean annual spend in the segment (14,697), followed by Milk (10,346). The segment is also 71.3% Retail (2) based on Channel.\n\n2. RELATIVE CUSTOMER VALUE:\n   - Cluster 1 has mean total annual spend of 44,884 versus 24,529 for Cluster 0. This supports prioritizing value-based tests, not an assumption that higher spend will produce a stronger promotional response.\n\n[CAVEAT] These are hypotheses based on observed spending and channel composition. They are not causal claims about promotion response, pricing sensitivity, delivery frequency, or future sales."
+    },
+    "decision_framework": {
+      "heading": "7. Decision Framework",
+      "text": "Cluster 0 — Horeca (1) Fresh/Frozen Buyers\n252 customers (57.3% of customers).\nDecision hypothesis: Prioritize offers aligned with the segment's two highest mean-spend categories (Fresh and Frozen) and validate response using customer-level outcomes before operationalizing the strategy.\n\nCluster 1 — Retail (2) Grocery/Milk Buyers\n188 customers (42.7% of customers).\nDecision hypothesis: Prioritize offers aligned with the segment's two highest mean-spend categories (Grocery and Milk) and validate response using customer-level outcomes before operationalizing the strategy.\n\nThese recommendations are decision hypotheses, not causal claims. The dataset is observational and does not measure promotion response, margin, delivery frequency, or customer lifetime value."
+    },
+    "limitations": {
+      "heading": "8. Limitations",
+      "text": "1. SMALL DATASET: only 440 customer records. Cluster boundaries and profile statistics (means, ANOVA F-values) are estimated from a relatively small sample and may not generalize to a larger customer base without re-validation.\n\n2. SINGLE TIME-SNAPSHOT DATA: spend values are annual totals with no seasonality or time dimension. A customer's segment could shift across a year (e.g. a Horeca account's Fresh spend may spike seasonally) — this analysis cannot detect or account for that.\n\n3. NO DEMOGRAPHIC/FIRMOGRAPHIC DATA: beyond Channel and Region, no other customer attributes (business size, years as customer, order frequency, etc.) are available, limiting how deeply the 'why' behind each cluster's spend pattern can be explained.\n\n4. K-MEANS' SPHERICAL-CLUSTER ASSUMPTION: K-Means is most naturally suited to compact, roughly spherical clusters under Euclidean distance. The observed structure may not perfectly meet this assumption. The dendrogram (Phase 5) and residual skew after log-transform (Phase 4) suggest the true spend distribution may not perfectly fit this assumption, so some customers near the cluster boundary (visible in Phase 8's PCA scatter) may be ambiguously assigned.\n\n5. LOG-TRANSFORM INTERPRETABILITY: the log1p transform (Phase 4) was necessary to stabilize variance for clustering, but it changes the geometry of distances — a given gap in log-space does not correspond to a constant dollar gap in raw spend. Business stakeholders reading 'distance between clusters' should refer to the raw mean/median tables (Phase 7), not transformed-space distances, for dollar-denominated conclusions.\n\n6. SELECTED SOLUTION IS COARSE: the selected K is a low-dimensional segmentation, and its silhouette relative to an ideal separation and strong Channel alignment mean it may capture a broad business split rather than multiple fine-grained segments. This means the segmentation may be relatively coarse — it captures the dominant Horeca-vs-Retail-like spend split but may be masking finer sub-segments that this dataset's size/structure cannot reliably resolve with K-Means."
+    },
+    "conclusion": {
+      "heading": "9. Conclusion",
+      "text": "This analysis segmented 440 wholesale customers into 2 stable K-Means clusters based on annual spend across 6 product categories. The selected solution had the strongest K-Means silhouette among the stability-qualified candidates and passed the project's seed-variation and bootstrap stability checks.\n\n  - Cluster 0: \"Horeca (1) Fresh/Frozen Buyers\"\n  - Cluster 1: \"Retail (2) Grocery/Milk Buyers\"\n\nThe clusters align strongly with the pre-existing Channel variable even though Channel was excluded from clustering. This is best treated as post-hoc contextual evidence of business relevance, not external validation. The solution should therefore be interpreted as a broad spend segmentation that substantially separates Retail-dominant and Horeca-dominant purchasing patterns.\n\nRECOMMENDED NEXT STEPS:\n  1. Re-run the pipeline on more recent and larger customer data, ideally with monthly or transaction-level history, to test whether the segmentation persists over time.\n  2. Validate the business hypotheses using order frequency, delivery, promotion-response, margin, and customer-tenure data.\n  3. Investigate finer segmentation with additional algorithms only after validating whether K>2 solutions remain stable.\n  4. Treat the current segments as decision-support hypotheses rather than fixed customer categories."
+    },
+    "references": {
+      "heading": "10. References",
+      "items": [
+        [
+          "UCI Machine Learning Repository — Wholesale Customers",
+          "https://archive.ics.uci.edu/dataset/292/wholesale+customers"
+        ],
+        [
+          "Scikit-learn KMeans documentation",
+          "https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html"
+        ],
+        [
+          "Scikit-learn silhouette_score documentation",
+          "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html"
+        ]
+      ]
+    },
+    "appendix": {
+      "heading": "Appendix: Reproducibility & Full Pipeline Reference",
+      "text": "The analysis is implemented as phases 1 through 10 using the reusable modules under src/. Reproducibility settings are fixed at random seed 42, K-Means n_init=20, log1p transformation followed by StandardScaler, final K=2, and multiple-seed plus bootstrap ARI stability validation. The executed notebook environment is Python 3.13.5 with pinned package versions in requirements.txt."
+    },
+    "reproducibility": {
+      "heading": "Appendix: Reproducibility & Environment",
+      "random_seed": 42,
+      "kmeans": "K-Means with n_init=20",
+      "preprocessing": "log1p + StandardScaler",
+      "final_k": 2,
+      "stability": "Multiple random seeds + bootstrap ARI",
+      "python": "3.13.5",
+      "packages": {
+        "pandas": "2.2.3",
+        "numpy": "2.3.5",
+        "scikit-learn": "1.8.0",
+        "scipy": "1.17.0",
+        "matplotlib": "3.10.8",
+        "seaborn": "0.13.2",
+        "jupyterlab": "4.5.3",
+        "notebook": "7.5.3",
+        "pytest": "9.0.2"
+      },
+      "reproduction_note": "The executed notebooks use the same canonical preprocessing and K-selection logic as the pipeline under src/. Re-running the pipeline with the pinned environment reproduces the documented analysis settings."
+    }
+  }
+}

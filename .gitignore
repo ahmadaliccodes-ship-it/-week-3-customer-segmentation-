@@ -1,25 +1,16 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-
 # Virtual environments
 .venv/
 venv/
 env/
 
-# Jupyter
+# Python cache and test artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Jupyter artifacts
 .ipynb_checkpoints/
 
-# OS / editor
+# OS/editor/local secrets
 .DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Local/generated scratch files
-*.log
 .env
-
-# Optional notebook execution artifacts
-execution_outputs/
